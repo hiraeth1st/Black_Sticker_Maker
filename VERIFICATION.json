@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "status": "source_project_not_android_built",
+  "verified": [
+    "Java core compiled and executed",
+    "Pack allocation for 0..10000 items",
+    "Lossy and lossless animated WebP decoded independently with Pillow/libwebp",
+    "Java syntax parsed",
+    "Android XML parsed"
+  ],
+  "not_run": [
+    "Android SDK compilation",
+    "Android lint",
+    "Android instrumentation tests",
+    "Real WhatsApp pack import",
+    "More than 10 packs in WhatsApp"
+  ],
+  "checks": 3353365
+}

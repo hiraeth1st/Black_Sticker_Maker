@@ -1,0 +1,25 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <provider android:authorities="com.whatsapp.provider.sticker_whitelist_check" />
+        <provider android:authorities="com.whatsapp.w4b.provider.sticker_whitelist_check" />
+    </queries>
+    <application android:label="Sticker Atölyesi" android:theme="@style/AppTheme"
+        android:icon="@drawable/ic_app" android:allowBackup="false" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service android:name=".ImportService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <provider android:name=".StickerProvider"
+            android:authorities="com.aziz.stickeratolyesi.stickers" android:exported="true"
+            android:enabled="true" android:readPermission="com.whatsapp.sticker.READ" />
+    </application>
+</manifest>
