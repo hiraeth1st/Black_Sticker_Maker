@@ -1,19 +1,24 @@
 {
   "version": "0.1.0",
-  "status": "source_project_not_android_built",
+  "status": "android_built_emulator_tests_passed",
   "verified": [
     "Java core compiled and executed",
     "Pack allocation for 0..10000 items",
     "Lossy and lossless animated WebP decoded independently with Pillow/libwebp",
     "Java syntax parsed",
-    "Android XML parsed"
+    "Android XML parsed",
+    "Android debug APK compilation",
+    "Android instrumentation APK compilation",
+    "Android lint",
+    "8 instrumentation tests passed on Android 10 emulator"
   ],
   "not_run": [
-    "Android SDK compilation",
-    "Android lint",
-    "Android instrumentation tests",
     "Real WhatsApp pack import",
-    "More than 10 packs in WhatsApp"
+    "More than 10 packs in WhatsApp",
+    "Physical-device import of the full 2000-file collection"
   ],
-  "checks": 3353365
+  "checks": 3353365,
+  "source_commit": "2203cc4d62ab30e081511ef1aa35d4e659c29320",
+  "workflow_run": "https://github.com/hiraeth1st/Black_Sticker_Maker/actions/runs/34105715503",
+  "apk_sha256": "ca456cfe7604cdc7f3e23616a5bfe7aca00fc265e567d87af8e03acbf66a4c59"
 }

@@ -1,10 +1,13 @@
 # Sticker Atölyesi — Android uygulama projesi
 
-**Durum: 0.1.0 geliştirme projesi. Bu teslimde kurulabilir APK yok.**
-Kaynak kodu yazıldı; Java çekirdek testleri ve bağımsız WebP çözme kontrolleri geçti.
-Android SDK bu çalışma ortamında bulunmadığından Android derlemesi, emülatör testleri
-ve gerçek WhatsApp'a ekleme henüz çalıştırılmadı. Bunların sonuçları alınmadan
-uygulama tamamlanmış/cihazda doğrulanmış sayılmamalıdır.
+**Durum: 0.1.0 APK derlendi; Android 10 emülatöründe 8 test geçti.**
+Android derlemesi, Android test APK'sı, lint ve bağımsız Java/WebP kontrolleri başarılı.
+[Doğrulanan derleme ve cihaz testleri](https://github.com/hiraeth1st/Black_Sticker_Maker/actions/runs/34105715503).
+Kaynak commit: `2203cc4d62ab30e081511ef1aa35d4e659c29320`.
+
+Gerçek WhatsApp uygulamasında paket ekleme ve 10'dan fazla paket aktarımı henüz
+fiziksel telefonda doğrulanmadı. Emülatör testleri dönüşümü ve ContentProvider
+sözleşmesini doğrular; WhatsApp'ın kendisini çalıştırmaz.
 
 ## Kullanım akışı
 
@@ -87,9 +90,8 @@ Projenin kök dizini, `settings.gradle` ve `app` klasörünün bulunduğu dizind
    sözleşmesini Android emülatöründe test eder. **Bu testler gerçek WhatsApp
    uygulamasının onay ekranını test etmez.** İki işin sonucunu da incele.
 
-Bu akış eklendi ancak bu teslim hazırlanırken çalıştırılmadı. İlk derleme hata
-verirse iş günlüğü üzerinden düzeltilmeli; yalnızca proje dosyasının bulunması
-APK'nın derlendiği anlamına gelmez.
+Bu akış çalıştırıldı: Android derlemesi ve 8 cihaz testi başarılı. APK, yukarıdaki
+derlemenin `Sticker-Atolyesi-APK` çıktısında bulunur.
 
 ### Android Studio / terminal
 
@@ -125,7 +127,7 @@ animasyonlar bağımsız libwebp/Pillow ile çözümlenir; kare sırası ve şef
 karşılaştırılır. Diğer Java dosyalarında yalnızca sözdizimi taraması yapar;
 Android tür denetiminin veya cihaz testinin yerini almaz.
 
-Android emülatörü bağlıyken çalıştırılacak ek test:
+Android 10 emülatöründe çalıştırılan ek test:
 
 ```sh
 gradle :app:connectedDebugAndroidTest
