@@ -1,0 +1,56 @@
+name: Publish Black Sticker Maker 0.1.0
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-release.yml]
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Verify source build
+        run: |
+          gh api repos/$GH_REPO/actions/runs/34106491437 > run.json
+          jq -e '.conclusion == "success" and .head_sha == "73a14b084b7a857c5288d35288ca18a42a0d88df"' run.json
+          gh api repos/$GH_REPO/actions/artifacts/10012597167 > artifact.json
+          jq -e '.expired == false and .name == "Sticker-Atolyesi-APK" and .workflow_run.id == 34106491437' artifact.json
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 34106491437
+          artifact-ids: 10012597167
+          path: package
+          merge-multiple: true
+      - name: Verify and publish exact APK
+        run: |
+          echo 'ca456cfe7604cdc7f3e23616a5bfe7aca00fc265e567d87af8e03acbf66a4c59  package/app-debug.apk' | sha256sum --check
+          mv package/app-debug.apk package/black-sticker-maker-0.1.0.apk
+          (cd package && sha256sum black-sticker-maker-0.1.0.apk > SHA256SUMS.txt)
+          cat > release-notes.md <<'NOTES'
+          Black Sticker Maker (Sticker Atölyesi) 0.1.0 — ön sürüm.
+
+          Android 9 ve üzeri. Kurulum için aşağıdaki APK dosyasını indirin.
+
+          - Klasör, çoklu dosya ve ZIP içe aktarma.
+          - Görsellerden sabit, GIF ve videolardan hareketli çıkartmalar.
+          - Paket önizleme, arama, ad değiştirme ve ZIP yedekleme.
+          - WhatsApp ve WhatsApp Business paket ekleme akışı.
+          - Dönüşümler cihazda yapılır; internet izni veya hesap gerekmez.
+
+          Son başarılı derlemenin APK'sı değiştirilmeden yayımlanmıştır. Derleme, lint ve Android emülatör testleri başarılıdır. Gerçek WhatsApp ile aktarım ve 10'dan fazla paket fiziksel cihazda henüz doğrulanmamıştır.
+
+          Bu APK debug derlemesidir ve depodaki herkese açık geliştirme anahtarıyla imzalanmıştır; üretim imzası değildir. Gizli üretim anahtarına geçişte mevcut uygulamanın kaldırılması gerekebilir. Önce uygulama içinden ZIP yedeği alın.
+
+          Kaynak: 73a14b084b7a857c5288d35288ca18a42a0d88df
+          Derleme: https://github.com/hiraeth1st/Black_Sticker_Maker/actions/runs/34106491437
+          NOTES
+          gh release create v0.1.0 --target 73a14b084b7a857c5288d35288ca18a42a0d88df --title 'Black Sticker Maker 0.1.0 — Ön sürüm' --notes-file release-notes.md --draft --prerelease package/black-sticker-maker-0.1.0.apk package/SHA256SUMS.txt
+          gh release edit v0.1.0 --draft=false
