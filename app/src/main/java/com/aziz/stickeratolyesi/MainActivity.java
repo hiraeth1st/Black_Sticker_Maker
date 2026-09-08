@@ -21,7 +21,7 @@ import java.util.concurrent.*;
 import java.util.zip.*;
 
 public final class MainActivity extends Activity {
-    private static final int FILES=40,TREE=41,ADD=42,BACKUP=43;
+    private static final int FILES=40,TREE=41,ADD=42,BACKUP=43,SINGLE=44;
     private static final int BG=0xff101715,CARD=0xff1d2923,INK=0xfff4f7ed,MUTED=0xffa8b9ab,LIME=0xffb7f279;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newFixedThreadPool(2);
@@ -33,7 +33,7 @@ public final class MainActivity extends Activity {
     private TextView summary,progressText,statusTitle;
     private ProgressBar progress;
     private LinearLayout controls;
-    private Button fileButton,folderButton;
+    private Button fileButton,folderButton,singleButton;
     private PackAdapter adapter;
     private boolean preparing,detailOpen;
     private String signature="",lastAdd="";
@@ -59,6 +59,7 @@ public final class MainActivity extends Activity {
         LinearLayout importRow=row();
         folderButton=button("Klasör seç",true,v->pick(TREE)); fileButton=button("Dosya / ZIP",false,v->pick(FILES));
         importRow.addView(folderButton,weight()); importRow.addView(fileButton,weight()); box.addView(importRow);
+        singleButton=button("Tek çıkartma oluştur",false,v->pick(SINGLE)); box.addView(singleButton);
         TextView hint=text("PNG, JPG, WebP, GIF ve kısa videolar\nAlt klasörler dahil · Tamamı telefonda işlenir",11,MUTED); hint.setPadding(0,dp(6),0,0); box.addView(hint);
         statusTitle=text("Başlamak için dosyalarını seç",14,INK); statusTitle.setPadding(0,dp(14),0,dp(3)); root.addView(statusTitle);
         progressText=text("",12,MUTED); root.addView(progressText);
@@ -88,7 +89,8 @@ public final class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},50);
         Intent i;
         if(request==TREE) i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        else i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+        else i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,request!=SINGLE);
+        if(request==SINGLE) i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         try { startActivityForResult(i,request); } catch(ActivityNotFoundException e) { message("Dosya seçici bulunamadı"); }
     }
@@ -104,24 +106,31 @@ public final class MainActivity extends Activity {
         super.onActivityResult(request,result,data);
         if(request==ADD) {
             String error=data==null?null:data.getStringExtra("validation_error");
-            if(error!=null && !error.isEmpty()) message("WhatsApp paketi ekleyemedi: "+error);
+            if(error!=null && !error.isEmpty()) {
+                List<JSONObject> items=store.items(lastAdd);
+                if(items.size()==1) new AlertDialog.Builder(this).setTitle("WhatsApp tekli paketi kabul etmedi")
+                    .setMessage(error+"\n\nİstersen aynı çıkartmanın 3 kopyasını içeren ayrı bir uyumlu paket oluşturabilirsin. Tekli paketin korunur.")
+                    .setNegativeButton("Kapat",null).setPositiveButton("3 kopyalı paket",(d,w)->singlePack(items.get(0).optString("hash"),items.get(0).optString("name"),true)).show();
+                else message("WhatsApp paketi ekleyemedi: "+error);
+            }
             else if(result==RESULT_OK) message("Paket WhatsApp’a eklendi.");
             else if(!lastAdd.isEmpty()) message("Ekleme tamamlanmadı. Paketi yeniden deneyebilirsin.");
             return;
         }
         if(result!=RESULT_OK || data==null) return;
         if(request==BACKUP) { if(data.getData()!=null) writeBackup(data.getData()); return; }
-        if(request!=FILES && request!=TREE) return;
+        if(request!=FILES && request!=TREE && request!=SINGLE) return;
         JSONArray roots=new JSONArray(); Set<String> seen=new HashSet<>(); List<Uri> uris=new ArrayList<>();
         if(data.getClipData()!=null) for(int n=0;n<data.getClipData().getItemCount();n++) uris.add(data.getClipData().getItemAt(n).getUri());
         else if(data.getData()!=null) uris.add(data.getData());
+        if(request==SINGLE && uris.size()!=1) { message("Lütfen yalnızca bir görsel, GIF veya video seç."); return; }
         for(Uri uri:uris) {
             if(!seen.add(uri.toString())) continue;
             try { getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION); }
             catch(SecurityException e) {
                 message("Bu konum kalıcı okuma izni vermedi. Dosyaları telefonun Dosyalar uygulamasından seç."); return;
             }
-            try { roots.put(new JSONObject().put("uri",uri.toString()).put("tree",request==TREE)); }
+            try { roots.put(new JSONObject().put("uri",uri.toString()).put("tree",request==TREE).put("single",request==SINGLE)); }
             catch(JSONException e) { message("Dosya seçimi okunamadı"); return; }
         }
         if(roots.length()==0) return;
@@ -147,11 +156,11 @@ public final class MainActivity extends Activity {
         if(key.equals(signature)) return; signature=key;
         boolean busy=preparing||ImportService.running;
         boolean unfinished=job!=null&&!state.equals("done");
-        fileButton.setEnabled(!busy&&!unfinished); folderButton.setEnabled(!busy&&!unfinished);
+        singleButton.setEnabled(!busy&&!unfinished); fileButton.setEnabled(!busy&&!unfinished); folderButton.setEnabled(!busy&&!unfinished);
         int total=c[0]+c[1]+c[2]+c[3],done=total-c[0];
         progress.setMax(Math.max(1,total)); progress.setProgress(done); progress.setIndeterminate(busy&&total==0);
         statusTitle.setText(preparing?"Seçim kaydediliyor":job==null?"Başlamak için dosyalarını seç":state.equals("done")?(c[1]>0?"Paketlerin hazır":"İşlem tamamlandı · yeni çıkartma yok"):busy?"Çıkartmalar hazırlanıyor":"İşlem bekliyor");
-        progressText.setText(job==null?"Her paket 3–30 çıkartma içerir.":job.optString("message")+"\n"+c[1]+" hazır · "+c[2]+" hata · "+c[3]+" aynı dosya · "+done+" / "+total);
+        progressText.setText(job==null?"Tekli veya toplu çıkartma oluşturabilirsin.":job.optString("message")+"\n"+c[1]+" hazır · "+c[2]+" hata · "+c[3]+" aynı dosya · "+done+" / "+total);
         controls.removeAllViews();
         if(job!=null) {
             String id=job.optString("id");
@@ -199,16 +208,21 @@ public final class MainActivity extends Activity {
             iv.setContentDescription(item.optString("name")); iv.setOnClickListener(v->preview(file,item.optString("name")));
         }
         content.addView(grid);
-        if(items.size()<3) content.addView(text("WhatsApp için en az 3 çıkartma gerekli. Yeni dosyalar aldığında aynı türdeki eksik gruplar otomatik birleştirilir.",13,0xffffc88c));
+        if(items.size()==1) content.addView(button("3 kopyalı uyumlu paket oluştur",false,v->
+            new AlertDialog.Builder(this).setTitle("Uyumlu paket oluştur?")
+                .setMessage("WhatsApp'ın en az 3 çıkartma isteyen sürümleri için aynı çıkartmanın 3 kopyası ayrı pakete konur. Tekli paket korunur.")
+                .setNegativeButton("Vazgeç",null).setPositiveButton("Oluştur",(d,w)->singlePack(items.get(0).optString("hash"),pack.optString("name"),true)).show()));
+        if(items.size()<3) content.addView(text("Tekli aktarım WhatsApp sürümüne bağlıdır. Reddedilirse tek çıkartma için 3 kopyalı uyumlu paket oluşturabilirsin.",13,0xffffc88c));
         ScrollView scroll=new ScrollView(this); scroll.addView(content);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(pack.optString("name")).setView(scroll)
             .setPositiveButton("WhatsApp’a ekle",(d,w)->addPack(pack)).setNeutralButton("Ad değiştir",(d,w)->rename(pack)).setNegativeButton("Kapat",null).create();
-        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(items.size()>=3));
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(!items.isEmpty()));
         dialog.setOnDismissListener(d->detailOpen=false); dialog.show();
     }
     private void preview(File file,String label) {
         ImageView image=new ImageView(this); image.setAdjustViewBounds(true); image.setMinimumHeight(dp(250)); image.setPadding(dp(16),dp(16),dp(16),dp(16));
-        AlertDialog d=new AlertDialog.Builder(this).setTitle(label).setView(image).setPositiveButton("Kapat",null).create();
+        AlertDialog d=new AlertDialog.Builder(this).setTitle(label).setView(image).setPositiveButton("Kapat",null)
+            .setNeutralButton("Ayrı paket yap",(dialog,which)->singlePack(file.getName().substring(0,64),label,false)).create();
         final Drawable[] shown=new Drawable[1];
         d.setOnDismissListener(x->{ if(shown[0] instanceof Animatable) ((Animatable)shown[0]).stop(); }); d.show();
         io.execute(()->{
@@ -228,7 +242,7 @@ public final class MainActivity extends Activity {
         }).show();
     }
     private void addPack(JSONObject pack) {
-        if(store.items(pack.optString("id")).size()<3) { message("WhatsApp için en az 3 çıkartma gerekli."); return; }
+        if(store.items(pack.optString("id")).isEmpty()) { message("Paket boş."); return; }
         List<String> targets=new ArrayList<>(),labels=new ArrayList<>();
         for(String target:new String[]{"com.whatsapp","com.whatsapp.w4b"}) {
             try { getPackageManager().getPackageInfo(target,0); targets.add(target); labels.add(target.endsWith("w4b")?"WhatsApp Business":"WhatsApp"); }
@@ -237,6 +251,14 @@ public final class MainActivity extends Activity {
         if(targets.isEmpty()) { message("WhatsApp veya WhatsApp Business yüklü değil."); return; }
         if(targets.size()==1) launchPack(pack,targets.get(0));
         else new AlertDialog.Builder(this).setTitle("Nereye eklensin?").setItems(labels.toArray(new String[0]),(d,n)->launchPack(pack,targets.get(n))).show();
+    }
+    private void singlePack(String hash,String label,boolean compatible) {
+        io.execute(()->{
+            try {
+                JSONObject pack=store.createSinglePack(hash,label+(compatible?" · 3 kopya":" · Tekli"),compatible);
+                runOnUiThread(()->{ if(isFinishing()||isDestroyed()) return; signature=""; refresh(); addPack(pack); });
+            } catch(Exception e) { runOnUiThread(()->message(e.getMessage())); }
+        });
     }
     private void launchPack(JSONObject pack,String target) {
         lastAdd=pack.optString("id");
@@ -273,7 +295,7 @@ public final class MainActivity extends Activity {
                         String id=p.optString("id"); String folder=p.optString("name").replaceAll("[^\\p{L}\\p{N} _-]","_")+"_"+id;
                         JSONArray files=new JSONArray();
                         for(JSONObject item:store.items(id)) {
-                            String entry=folder+"/"+item.optString("hash")+".webp"; zip.putNextEntry(new ZipEntry(entry));
+                            String entry=folder+"/"+item.optInt("position")+"_"+item.optString("hash")+".webp"; zip.putNextEntry(new ZipEntry(entry));
                             try(InputStream in=new FileInputStream(store.mediaFile(item.optString("hash")))) {
                                 int n; while((n=in.read(buffer))!=-1) { if(Thread.currentThread().isInterrupted()) throw new IOException("Yedekleme kesildi"); zip.write(buffer,0,n); }
                             }
@@ -315,8 +337,8 @@ public final class MainActivity extends Activity {
             } else card=(LinearLayout)recycled;
             Object[] views=(Object[])card.getTag(); image=(ImageView)views[0]; label=(TextView)views[1]; meta=(TextView)views[2]; add=(Button)views[3];
             JSONObject p=visible.get(position); label.setText(p.optString("name"));
-            meta.setText(p.optInt("count")+" çıkartma · "+(p.optInt("animated")==1?"Hareketli":"Sabit")+(p.optInt("count")<3?" · Eksik":""));
-            add.setEnabled(p.optInt("count")>=3); add.setOnClickListener(v->addPack(p)); add.setContentDescription(p.optString("name")+" paketini WhatsApp’a ekle");
+            meta.setText(p.optInt("count")+" çıkartma · "+(p.optInt("animated")==1?"Hareketli":"Sabit")+(p.optInt("count")==1?" · Tekli":""));
+            add.setEnabled(p.optInt("count")>0); add.setOnClickListener(v->addPack(p)); add.setContentDescription(p.optString("name")+" paketini WhatsApp’a ekle");
             thumbnail(image,store.trayFile(p.optString("id"))); return card;
         }
     }

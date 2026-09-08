@@ -77,6 +77,49 @@ public final class ConversionTest extends InstrumentationTestCase {
         try { context.getContentResolver().openFileDescriptor(tray,"w"); } catch(Exception expected) { denied=true; }
         assertTrue(denied);
     }
+    public void testSingleStaticPackSurvivesLaterImport() throws Exception {
+        verifySingle("wide.png",false);
+    }
+    public void testSingleAnimatedPackAndCompatibleCopies() throws Exception {
+        verifySingle("moving.gif",true);
+    }
+    private void verifySingle(String source,boolean animated) throws Exception {
+        Context context=getInstrumentation().getTargetContext(); Store store=Store.get(context);
+        String hash=UUID.randomUUID().toString().replace("-","")+UUID.randomUUID().toString().replace("-","");
+        String job=store.createJob("Single",new JSONArray());
+        store.task(job,"test:"+hash,"",source);
+        store.complete(store.nextTask(job).getLong("id"),hash,source,convert(source));
+        store.finish(job);
+        String id=job+"_"+(animated?1:0)+"_1";
+        assertEquals(1,store.items(id).size());
+        JSONObject separate=store.createSinglePack(hash,"Separate",false);
+        String later=store.createJob("Later",new JSONArray()); store.finish(later);
+        assertNotNull(store.pack(id)); assertEquals(1,store.items(id).size());
+        assertEquals(1,store.items(separate.getString("id")).size());
+        store.finish(job); assertEquals(1,store.items(id).size());
+        try(Cursor c=context.getContentResolver().query(Uri.parse("content://"+Store.AUTHORITY+"/metadata/"+id),null,null,null,null)) {
+            assertNotNull(c); assertEquals(1,c.getCount()); assertTrue(c.moveToFirst());
+            assertEquals(animated?1:0,c.getInt(c.getColumnIndexOrThrow("animated_sticker_pack")));
+        }
+        JSONObject compatible=store.createSinglePack(hash,"Compatible",true);
+        assertEquals(3,store.items(compatible.getString("id")).size());
+        Set<String> names=new HashSet<>();
+        try(Cursor c=context.getContentResolver().query(Uri.parse("content://"+Store.AUTHORITY+"/stickers/"+compatible.getString("id")),null,null,null,null)) {
+            assertNotNull(c); assertEquals(3,c.getCount());
+            while(c.moveToNext()) {
+                String name=c.getString(c.getColumnIndexOrThrow("sticker_file_name")); assertTrue(names.add(name));
+                Uri uri=Uri.parse("content://"+Store.AUTHORITY+"/stickers_asset/"+compatible.getString("id")+"/"+name);
+                try(InputStream in=context.getContentResolver().openInputStream(uri)) {
+                    ByteArrayOutputStream bytes=new ByteArrayOutputStream(); byte[] buffer=new byte[4096]; int n;
+                    while((n=in.read(buffer))!=-1) bytes.write(buffer,0,n);
+                    assertTrue(Arrays.equals(Files.readAllBytes(store.mediaFile(hash).toPath()),bytes.toByteArray()));
+                }
+            }
+        }
+        Uri invalid=Uri.parse("content://"+Store.AUTHORITY+"/stickers_asset/"+id+"/"+hash+"_29.webp");
+        boolean denied=false; try { context.getContentResolver().openFileDescriptor(invalid,"r"); } catch(FileNotFoundException expected) { denied=true; }
+        assertTrue(denied);
+    }
     private void assertDifferentFrames(Webp.Info i) throws Exception {
         byte[] a=Webp.standalone(i.frames.get(0)), b=Webp.standalone(i.frames.get(i.frames.size()-1));
         Bitmap first=BitmapFactory.decodeByteArray(a,0,a.length), last=BitmapFactory.decodeByteArray(b,0,b.length);

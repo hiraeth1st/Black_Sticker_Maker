@@ -52,6 +52,11 @@ public final class ImportService extends Service {
             Importer importer=new Importer(this,job,this::check,this::update);
             JSONObject data=store.job(job);
             if(data.optInt("scanned")==0) importer.scan(new JSONArray(data.getString("roots")));
+            JSONArray roots=new JSONArray(data.getString("roots"));
+            boolean single=roots.length()==1 && roots.getJSONObject(0).optBoolean("single");
+            int[] initial=store.counts(job);
+            if(single && initial[0]+initial[1]+initial[2]+initial[3]!=1)
+                throw new IllegalArgumentException("Tek çıkartma için bir görsel, GIF veya video seç.");
             JSONObject task;
             while((task=store.nextTask(job))!=null) {
                 check();
@@ -61,7 +66,7 @@ public final class ImportService extends Service {
                 File source=null;
                 try {
                     source=importer.source(task); String hash=importer.hash(source);
-                    if(store.hasMedia(hash)) store.taskState(id,3,hash,"");
+                    if(store.hasMedia(hash)) store.taskState(id,single?1:3,hash,"");
                     else {
                         Converter.Result result=Converter.convert(source,task.getString("name"),this::check);
                         check(); store.complete(id,hash,task.getString("name"),result);

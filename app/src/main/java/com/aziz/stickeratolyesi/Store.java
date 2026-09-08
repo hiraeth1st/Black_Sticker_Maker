@@ -90,12 +90,9 @@ public final class Store extends SQLiteOpenHelper {
         if(j==null || "done".equals(j.optString("state"))) return;
         // Files are generated first; publishing metadata and marking the job done are one transaction.
         List<JSONObject> newPacks=new ArrayList<>();
-        List<String> oldDrafts=new ArrayList<>();
+
         for(int animated=0;animated<2;animated++) {
             List<JSONObject> items=new ArrayList<>();
-            for(JSONObject draft:rows("SELECT p.id FROM packs p JOIN pack_items i ON i.pack=p.id WHERE p.animated=? GROUP BY p.id HAVING COUNT(i.hash)<3 ORDER BY p.created",new String[]{""+animated})) {
-                String id=draft.getString("id"); oldDrafts.add(id); items.addAll(items(id));
-            }
             items.addAll(rows("SELECT m.* FROM tasks t JOIN media m ON m.hash=t.hash WHERE t.job=? AND t.state=1 AND m.animated=? ORDER BY t.id",new String[]{job,""+animated}));
             int offset=0,number=1;
             for(int size:PackPlanner.sizes(items.size())) {
@@ -109,7 +106,6 @@ public final class Store extends SQLiteOpenHelper {
         }
         SQLiteDatabase db=getWritableDatabase(); db.beginTransaction();
         try {
-            for(String draft:oldDrafts) db.delete("packs","id=?",new String[]{draft});
             for(JSONObject p:newPacks) {
                 ContentValues v=new ContentValues(); v.put("id",p.getString("id")); v.put("name",p.getString("name"));
                 v.put("animated",p.getInt("animated")); v.put("version","1"); v.put("created",System.currentTimeMillis());
@@ -122,8 +118,27 @@ public final class Store extends SQLiteOpenHelper {
             }
             jobState(job,"done",newPacks.size()+" paket hazır"); db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
-        for(String draft:oldDrafts) trayFile(draft).delete();
         context.getContentResolver().notifyChange(android.net.Uri.parse("content://"+AUTHORITY+"/metadata"),null);
+    }
+    /** Reuses media bytes, while keeping every published pack identifier stable. */
+    public synchronized JSONObject createSinglePack(String hash,String name,boolean compatible) throws Exception {
+        JSONObject media=one("SELECT * FROM media WHERE hash=?",new String[]{hash});
+        if(media==null || !hasMedia(hash)) throw new IOException("Çıkartma bulunamadı");
+        String id=UUID.randomUUID().toString().replace("-","");
+        Converter.tray(mediaFile(hash),trayFile(id));
+        SQLiteDatabase db=getWritableDatabase(); db.beginTransaction();
+        try {
+            ContentValues p=new ContentValues(); p.put("id",id); p.put("name",name);
+            p.put("animated",media.getInt("animated")); p.put("version","1"); p.put("created",System.currentTimeMillis());
+            db.insertOrThrow("packs",null,p);
+            for(int n=0;n<(compatible?3:1);n++) {
+                ContentValues item=new ContentValues(); item.put("pack",id); item.put("position",n); item.put("hash",hash);
+                db.insertOrThrow("pack_items",null,item);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        context.getContentResolver().notifyChange(android.net.Uri.parse("content://"+AUTHORITY+"/metadata"),null);
+        return pack(id);
     }
     public List<JSONObject> packs() {
         return rows("SELECT p.*,COUNT(i.hash) AS count FROM packs p JOIN pack_items i ON i.pack=p.id GROUP BY p.id ORDER BY p.created,p.id",null);

@@ -25,8 +25,7 @@ public final class StickerProvider extends ContentProvider {
             if(p.size()==1) packs=store.packs();
             else { JSONObject pack=store.pack(p.get(1)); packs=pack==null?Collections.emptyList():Collections.singletonList(pack); }
             for(JSONObject pack:packs) {
-                // Incomplete groups remain visible in the app, but cannot be offered to WhatsApp.
-                if(store.items(pack.optString("id")).size()<3) continue;
+                if(store.items(pack.optString("id")).isEmpty()) continue;
                 c.addRow(new Object[]{pack.optString("id"),pack.optString("name"),"Sticker Atölyesi","tray.png",
                     "","","","","","",pack.optString("version"),0,pack.optInt("animated")});
             }
@@ -34,7 +33,13 @@ public final class StickerProvider extends ContentProvider {
         }
         if(p.size()==2 && p.get(0).equals("stickers")) {
             MatrixCursor c=new MatrixCursor(new String[]{"sticker_file_name","sticker_emoji","sticker_accessibility_text"});
-            for(JSONObject item:store.items(p.get(1))) c.addRow(new Object[]{item.optString("hash")+".webp","🙂",""});
+            List<JSONObject> items=store.items(p.get(1));
+            Set<String> seen=new HashSet<>();
+            for(JSONObject item:items) {
+                String hash=item.optString("hash");
+                String filename=hash+(seen.add(hash)?"":"_"+item.optInt("position"))+".webp";
+                c.addRow(new Object[]{filename,"🙂",item.optString("name")});
+            }
             c.setNotificationUri(getContext().getContentResolver(),uri); return c;
         }
         throw new IllegalArgumentException("Desteklenmeyen çıkartma sorgusu");
@@ -46,9 +51,16 @@ public final class StickerProvider extends ContentProvider {
         String name=p.get(2); File file;
         if("tray.png".equals(name)) file=store.trayFile(p.get(1));
         else {
-            if(!name.matches("[a-f0-9]{64}\\.webp")) throw new FileNotFoundException("Geçersiz çıkartma");
+            if(!name.matches("[a-f0-9]{64}(_[0-9]+)?\\.webp")) throw new FileNotFoundException("Geçersiz çıkartma");
             String hash=name.substring(0,64);
             if(!store.member(p.get(1),hash)) throw new FileNotFoundException("Paketin dışında");
+            if(name.charAt(64)=='_') {
+                String position=name.substring(65,name.length()-5);
+                boolean found=false;
+                for(JSONObject item:store.items(p.get(1)))
+                    if(position.equals(Integer.toString(item.optInt("position"))) && hash.equals(item.optString("hash"))) found=true;
+                if(!found) throw new FileNotFoundException("Geçersiz çıkartma sırası");
+            }
             file=store.mediaFile(hash);
         }
         if(!file.isFile()) throw new FileNotFoundException("Dosya bulunamadı"); return file;
