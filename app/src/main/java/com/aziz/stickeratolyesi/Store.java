@@ -122,6 +122,9 @@ public final class Store extends SQLiteOpenHelper {
     }
     /** Reuses media bytes, while keeping every published pack identifier stable. */
     public synchronized JSONObject createSinglePack(String hash,String name,boolean compatible) throws Exception {
+        name=name==null?"Tek çıkartma":name.trim();
+        if(name.isEmpty()) name="Tek çıkartma";
+        if(name.length()>100) name=name.substring(0,100);
         JSONObject media=one("SELECT * FROM media WHERE hash=?",new String[]{hash});
         if(media==null || !hasMedia(hash)) throw new IOException("Çıkartma bulunamadı");
         String id=UUID.randomUUID().toString().replace("-","");
